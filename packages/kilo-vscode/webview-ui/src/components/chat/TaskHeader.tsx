@@ -14,7 +14,11 @@ import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
 import type { TodoItem } from "../../types/messages"
 
-export const TaskHeader: Component = () => {
+interface TaskHeaderProps {
+  readonly?: boolean
+}
+
+export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   const session = useSession()
   const language = useLanguage()
 
@@ -23,13 +27,24 @@ export const TaskHeader: Component = () => {
   const busy = createMemo(() => session.status() === "busy")
   const canCompact = createMemo(() => !busy() && hasMessages() && !!session.selected())
 
+  const fmt = (n: number) => new Intl.NumberFormat(language.locale(), { style: "currency", currency: "USD" }).format(n)
+
+  const breakdown = () => session.costBreakdown()
+
   const cost = createMemo(() => {
-    const total = session.totalCost()
+    const total = breakdown().reduce((sum, e) => sum + e.cost, 0)
     if (total === 0) return undefined
-    return new Intl.NumberFormat(language.locale(), {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    return fmt(total)
+  })
+
+  const costTooltip = createMemo(() => {
+    const items = breakdown()
+    if (items.length <= 1) return <span>{language.t("context.usage.sessionCost")}</span>
+    return (
+      <div style={{ "text-align": "left", "white-space": "nowrap" }}>
+        <For each={items}>{(e) => <div>{`${e.label}: ${fmt(e.cost)}`}</div>}</For>
+      </div>
+    )
   })
 
   const context = createMemo(() => {
@@ -65,7 +80,7 @@ export const TaskHeader: Component = () => {
         <div data-slot="task-header-stats">
           <Show when={cost()}>
             {(c) => (
-              <Tooltip value={language.t("context.usage.sessionCost")} placement="bottom">
+              <Tooltip value={costTooltip()} placement="bottom">
                 <span>{c()}</span>
               </Tooltip>
             )}
@@ -80,16 +95,18 @@ export const TaskHeader: Component = () => {
               </Tooltip>
             )}
           </Show>
-          <Tooltip value={language.t("command.session.compact")} placement="bottom">
-            <IconButton
-              icon="collapse"
-              size="small"
-              variant="ghost"
-              disabled={!canCompact()}
-              onClick={() => session.compact()}
-              aria-label={language.t("command.session.compact")}
-            />
-          </Tooltip>
+          <Show when={!props.readonly}>
+            <Tooltip value={language.t("command.session.compact")} placement="bottom">
+              <IconButton
+                icon="compress"
+                size="small"
+                variant="ghost"
+                disabled={!canCompact()}
+                onClick={() => session.compact()}
+                aria-label={language.t("command.session.compact")}
+              />
+            </Tooltip>
+          </Show>
         </div>
       </div>
       <Show when={hasTodos()}>
